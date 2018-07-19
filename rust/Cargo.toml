@@ -1,0 +1,13 @@
+[package]
+name = "quack"
+version = "0.1.0"
+authors = ["Will Fuqua <wafuqua@gmail.com>"]
+
+[lib]
+crate-type = ["dylib"]
+
+[dependencies]
+libc = "*"
+
+[build-dependencies]
+cc = "1.0"
