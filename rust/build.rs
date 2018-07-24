@@ -79,5 +79,5 @@ fn get_binding_generator() -> &'static str {
 #[cfg(target_os="macos")]
 fn get_binding_generator() -> &'static str {
     println!("using mac os version of rust_qt_binding_generator");
-    "tools/rust_qt_binding_generator"
+    "tools/rust_qt_binding_generator/mac/rust_qt_binding_generator"
 }
