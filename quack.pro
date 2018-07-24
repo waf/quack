@@ -31,9 +31,22 @@ qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
-win32:CONFIG(release, debug|release): LIBS += -L$$PWD/rust/target/release/ -lquack
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/rust/target/debug/ -lquack
-else:unix: LIBS += -L$$PWD/rust/target/debug/ -lquack
-
+# Link our rust library
+win32:CONFIG(release, debug|release): LIBS += $$PWD/target/release/quack.dll.lib
+else:win32:CONFIG(debug, debug|release): LIBS += $$PWD/target/debug/quack.dll.lib
+else:unix: LIBS += -L$$PWD/target/debug/ -lquack
 INCLUDEPATH += $$PWD/rust/target/debug
 DEPENDPATH += $$PWD/rust/target/debug
+
+# Change the output directory to in-tree. Cargo is also configured to write here in rust/.cargo/config
+Release:DESTDIR = $$PWD/target/release
+Release:OBJECTS_DIR = $$PWD/target/release/.obj
+Release:MOC_DIR = $$PWD/target/release/.moc
+Release:RCC_DIR = $$PWD/target/release/.rcc
+Release:UI_DIR = $$PWD/target/release/.ui
+
+Debug:DESTDIR = $$PWD/target/debug
+Debug:OBJECTS_DIR = $$PWD/target/debug/.obj
+Debug:MOC_DIR = $$PWD/target/debug/.moc
+Debug:RCC_DIR = $$PWD/target/debug/.rcc
+Debug:UI_DIR = $$PWD/target/debug/.ui
