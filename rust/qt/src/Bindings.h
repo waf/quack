@@ -5,28 +5,42 @@
 #include <QObject>
 #include <QAbstractItemModel>
 
-class Todos;
+class Application;
+class Channels;
 
-class Todos : public QAbstractItemModel
+class Application : public QObject
 {
     Q_OBJECT
 public:
     class Private;
 private:
+    Channels* const m_channels;
     Private * m_d;
     bool m_ownsPrivate;
-    Q_PROPERTY(quint64 activeCount READ activeCount NOTIFY activeCountChanged FINAL)
-    Q_PROPERTY(quint64 count READ count NOTIFY countChanged FINAL)
-    explicit Todos(bool owned, QObject *parent);
+    Q_PROPERTY(Channels* channels READ channels NOTIFY channelsChanged FINAL)
+    explicit Application(bool owned, QObject *parent);
 public:
-    explicit Todos(QObject *parent = nullptr);
-    ~Todos();
-    quint64 activeCount() const;
-    quint64 count() const;
-    Q_INVOKABLE void add(const QString& description);
-    Q_INVOKABLE void clearCompleted();
-    Q_INVOKABLE bool remove(quint64 index);
-    Q_INVOKABLE void setAll(bool completed);
+    explicit Application(QObject *parent = nullptr);
+    ~Application();
+    const Channels* channels() const;
+    Channels* channels();
+signals:
+    void channelsChanged();
+};
+
+class Channels : public QAbstractItemModel
+{
+    Q_OBJECT
+    friend class Application;
+public:
+    class Private;
+private:
+    Private * m_d;
+    bool m_ownsPrivate;
+    explicit Channels(bool owned, QObject *parent);
+public:
+    explicit Channels(QObject *parent = nullptr);
+    ~Channels();
 
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -44,11 +58,7 @@ public:
     bool setHeaderData(int section, Qt::Orientation orientation, const QVariant &value, int role = Qt::EditRole) override;
     Q_INVOKABLE bool insertRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
     Q_INVOKABLE bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
-    bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override;
-    Q_INVOKABLE bool completed(int row) const;
-    Q_INVOKABLE bool setCompleted(int row, bool value);
-    Q_INVOKABLE QString description(int row) const;
-    Q_INVOKABLE bool setDescription(int row, const QString& value);
+    Q_INVOKABLE QString name(int row) const;
 
 signals:
     // new data is ready to be made available to the model with fetchMore()
@@ -57,7 +67,5 @@ private:
     QHash<QPair<int,Qt::ItemDataRole>, QVariant> m_headerData;
     void initHeaderData();
 signals:
-    void activeCountChanged();
-    void countChanged();
 };
 #endif // BINDINGS_H

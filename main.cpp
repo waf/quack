@@ -2,16 +2,20 @@
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <iostream>
+using namespace std;
 
 int main(int argc, char *argv[])
 {
+    cout << "main method" << endl;
+
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     QGuiApplication app(argc, argv);
-    qmlRegisterType<Todos>("RustCode", 1, 0, "Todos");
+    qmlRegisterType<Application>("RustCode", 1, 0, "Application");
 
     QQmlApplicationEngine engine;
-    engine.load(QUrl(QStringLiteral("qrc:/main.qml")));
+    engine.load(QUrl(QStringLiteral("qrc:/Main.qml")));
     if (engine.rootObjects().isEmpty())
         return -1;
 

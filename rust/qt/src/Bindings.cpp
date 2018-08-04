@@ -28,54 +28,57 @@ namespace {
     inline QVariant cleanNullQVariant(const QVariant& v) {
         return (v.isNull()) ?QVariant() :v;
     }
-    inline void todosActiveCountChanged(Todos* o)
-    {
-        emit o->activeCountChanged();
-    }
-    inline void todosCountChanged(Todos* o)
-    {
-        emit o->countChanged();
-    }
 }
 extern "C" {
-    bool todos_data_completed(const Todos::Private*, int);
-    bool todos_set_data_completed(Todos::Private*, int, bool);
-    void todos_data_description(const Todos::Private*, int, QString*, qstring_set);
-    bool todos_set_data_description(Todos::Private*, int, const ushort* s, int len);
-    void todos_sort(Todos::Private*, unsigned char column, Qt::SortOrder order = Qt::AscendingOrder);
+    Application::Private* application_new(Application*, Channels*,
+        void (*)(const Channels*),
+        void (*)(Channels*, quintptr, quintptr),
+        void (*)(Channels*),
+        void (*)(Channels*),
+        void (*)(Channels*, int, int),
+        void (*)(Channels*),
+        void (*)(Channels*, int, int),
+        void (*)(Channels*));
+    void application_free(Application::Private*);
+    Channels::Private* application_channels_get(const Application::Private*);
+};
 
-    int todos_row_count(const Todos::Private*);
-    bool todos_insert_rows(Todos::Private*, int, int);
-    bool todos_remove_rows(Todos::Private*, int, int);
-    bool todos_can_fetch_more(const Todos::Private*);
-    void todos_fetch_more(Todos::Private*);
+extern "C" {
+    void channels_data_name(const Channels::Private*, int, QString*, qstring_set);
+    void channels_sort(Channels::Private*, unsigned char column, Qt::SortOrder order = Qt::AscendingOrder);
+
+    int channels_row_count(const Channels::Private*);
+    bool channels_insert_rows(Channels::Private*, int, int);
+    bool channels_remove_rows(Channels::Private*, int, int);
+    bool channels_can_fetch_more(const Channels::Private*);
+    void channels_fetch_more(Channels::Private*);
 }
-int Todos::columnCount(const QModelIndex &parent) const
+int Channels::columnCount(const QModelIndex &parent) const
 {
     return (parent.isValid()) ? 0 : 1;
 }
 
-bool Todos::hasChildren(const QModelIndex &parent) const
+bool Channels::hasChildren(const QModelIndex &parent) const
 {
     return rowCount(parent) > 0;
 }
 
-int Todos::rowCount(const QModelIndex &parent) const
+int Channels::rowCount(const QModelIndex &parent) const
 {
-    return (parent.isValid()) ? 0 : todos_row_count(m_d);
+    return (parent.isValid()) ? 0 : channels_row_count(m_d);
 }
 
-bool Todos::insertRows(int row, int count, const QModelIndex &)
+bool Channels::insertRows(int row, int count, const QModelIndex &)
 {
-    return todos_insert_rows(m_d, row, count);
+    return channels_insert_rows(m_d, row, count);
 }
 
-bool Todos::removeRows(int row, int count, const QModelIndex &)
+bool Channels::removeRows(int row, int count, const QModelIndex &)
 {
-    return todos_remove_rows(m_d, row, count);
+    return channels_remove_rows(m_d, row, count);
 }
 
-QModelIndex Todos::index(int row, int column, const QModelIndex &parent) const
+QModelIndex Channels::index(int row, int column, const QModelIndex &parent) const
 {
     if (!parent.isValid() && row >= 0 && row < rowCount(parent) && column >= 0 && column < 1) {
         return createIndex(row, column, (quintptr)row);
@@ -83,86 +86,54 @@ QModelIndex Todos::index(int row, int column, const QModelIndex &parent) const
     return QModelIndex();
 }
 
-QModelIndex Todos::parent(const QModelIndex &) const
+QModelIndex Channels::parent(const QModelIndex &) const
 {
     return QModelIndex();
 }
 
-bool Todos::canFetchMore(const QModelIndex &parent) const
+bool Channels::canFetchMore(const QModelIndex &parent) const
 {
-    return (parent.isValid()) ? 0 : todos_can_fetch_more(m_d);
+    return (parent.isValid()) ? 0 : channels_can_fetch_more(m_d);
 }
 
-void Todos::fetchMore(const QModelIndex &parent)
+void Channels::fetchMore(const QModelIndex &parent)
 {
     if (!parent.isValid()) {
-        todos_fetch_more(m_d);
+        channels_fetch_more(m_d);
     }
 }
 
-void Todos::sort(int column, Qt::SortOrder order)
+void Channels::sort(int column, Qt::SortOrder order)
 {
-    todos_sort(m_d, column, order);
+    channels_sort(m_d, column, order);
 }
-Qt::ItemFlags Todos::flags(const QModelIndex &i) const
+Qt::ItemFlags Channels::flags(const QModelIndex &i) const
 {
     auto flags = QAbstractItemModel::flags(i);
-    if (i.column() == 0) {
-        flags |= Qt::ItemIsEditable;
-    }
     return flags;
 }
 
-bool Todos::completed(int row) const
-{
-    return todos_data_completed(m_d, row);
-}
-
-bool Todos::setCompleted(int row, bool value)
-{
-    bool set = false;
-    set = todos_set_data_completed(m_d, row, value);
-    if (set) {
-        QModelIndex index = createIndex(row, 0, row);
-        emit dataChanged(index, index);
-    }
-    return set;
-}
-
-QString Todos::description(int row) const
+QString Channels::name(int row) const
 {
     QString s;
-    todos_data_description(m_d, row, &s, set_qstring);
+    channels_data_name(m_d, row, &s, set_qstring);
     return s;
 }
 
-bool Todos::setDescription(int row, const QString& value)
-{
-    bool set = false;
-    set = todos_set_data_description(m_d, row, value.utf16(), value.length());
-    if (set) {
-        QModelIndex index = createIndex(row, 0, row);
-        emit dataChanged(index, index);
-    }
-    return set;
-}
-
-QVariant Todos::data(const QModelIndex &index, int role) const
+QVariant Channels::data(const QModelIndex &index, int role) const
 {
     Q_ASSERT(rowCount(index.parent()) > index.row());
     switch (index.column()) {
     case 0:
         switch (role) {
         case Qt::UserRole + 0:
-            return QVariant::fromValue(completed(index.row()));
-        case Qt::UserRole + 1:
-            return QVariant::fromValue(description(index.row()));
+            return QVariant::fromValue(name(index.row()));
         }
     }
     return QVariant();
 }
 
-int Todos::role(const char* name) const {
+int Channels::role(const char* name) const {
     auto names = roleNames();
     auto i = names.constBegin();
     while (i != names.constEnd()) {
@@ -173,13 +144,12 @@ int Todos::role(const char* name) const {
     }
     return -1;
 }
-QHash<int, QByteArray> Todos::roleNames() const {
+QHash<int, QByteArray> Channels::roleNames() const {
     QHash<int, QByteArray> names = QAbstractItemModel::roleNames();
-    names.insert(Qt::UserRole + 0, "completed");
-    names.insert(Qt::UserRole + 1, "description");
+    names.insert(Qt::UserRole + 0, "name");
     return names;
 }
-QVariant Todos::headerData(int section, Qt::Orientation orientation, int role) const
+QVariant Channels::headerData(int section, Qt::Orientation orientation, int role) const
 {
     if (orientation != Qt::Horizontal) {
         return QVariant();
@@ -187,7 +157,7 @@ QVariant Todos::headerData(int section, Qt::Orientation orientation, int role) c
     return m_headerData.value(qMakePair(section, (Qt::ItemDataRole)role), role == Qt::DisplayRole ?QString::number(section + 1) :QVariant());
 }
 
-bool Todos::setHeaderData(int section, Qt::Orientation orientation, const QVariant &value, int role)
+bool Channels::setHeaderData(int section, Qt::Orientation orientation, const QVariant &value, int role)
 {
     if (orientation != Qt::Horizontal) {
         return false;
@@ -196,43 +166,79 @@ bool Todos::setHeaderData(int section, Qt::Orientation orientation, const QVaria
     return true;
 }
 
-bool Todos::setData(const QModelIndex &index, const QVariant &value, int role)
-{
-    if (index.column() == 0) {
-        if (role == Qt::UserRole + 0) {
-            if (value.canConvert(qMetaTypeId<bool>())) {
-                return setCompleted(index.row(), value.value<bool>());
-            }
-        }
-        if (role == Qt::UserRole + 1) {
-            if (value.canConvert(qMetaTypeId<QString>())) {
-                return setDescription(index.row(), value.value<QString>());
-            }
-        }
-    }
-    return false;
-}
-
 extern "C" {
-    Todos::Private* todos_new(Todos*, void (*)(Todos*), void (*)(Todos*),
-        void (*)(const Todos*),
-        void (*)(Todos*, quintptr, quintptr),
-        void (*)(Todos*),
-        void (*)(Todos*),
-        void (*)(Todos*, int, int),
-        void (*)(Todos*),
-        void (*)(Todos*, int, int),
-        void (*)(Todos*));
-    void todos_free(Todos::Private*);
-    quint64 todos_active_count_get(const Todos::Private*);
-    quint64 todos_count_get(const Todos::Private*);
-    void todos_add(Todos::Private*, const ushort*, int);
-    void todos_clear_completed(Todos::Private*);
-    bool todos_remove(Todos::Private*, quint64);
-    void todos_set_all(Todos::Private*, bool);
+    Channels::Private* channels_new(Channels*,
+        void (*)(const Channels*),
+        void (*)(Channels*, quintptr, quintptr),
+        void (*)(Channels*),
+        void (*)(Channels*),
+        void (*)(Channels*, int, int),
+        void (*)(Channels*),
+        void (*)(Channels*, int, int),
+        void (*)(Channels*));
+    void channels_free(Channels::Private*);
 };
 
-Todos::Todos(bool /*owned*/, QObject *parent):
+Application::Application(bool /*owned*/, QObject *parent):
+    QObject(parent),
+    m_channels(new Channels(false, this)),
+    m_d(0),
+    m_ownsPrivate(false)
+{
+}
+
+Application::Application(QObject *parent):
+    QObject(parent),
+    m_channels(new Channels(false, this)),
+    m_d(application_new(this, m_channels,
+        [](const Channels* o) {
+            emit o->newDataReady(QModelIndex());
+        },
+        [](Channels* o, quintptr first, quintptr last) {
+            o->dataChanged(o->createIndex(first, 0, first),
+                       o->createIndex(last, 0, last));
+        },
+        [](Channels* o) {
+            o->beginResetModel();
+        },
+        [](Channels* o) {
+            o->endResetModel();
+        },
+        [](Channels* o, int first, int last) {
+            o->beginInsertRows(QModelIndex(), first, last);
+        },
+        [](Channels* o) {
+            o->endInsertRows();
+        },
+        [](Channels* o, int first, int last) {
+            o->beginRemoveRows(QModelIndex(), first, last);
+        },
+        [](Channels* o) {
+            o->endRemoveRows();
+        }
+)),
+    m_ownsPrivate(true)
+{
+    m_channels->m_d = application_channels_get(m_d);
+    connect(this->m_channels, &Channels::newDataReady, this->m_channels, [this](const QModelIndex& i) {
+        this->m_channels->fetchMore(i);
+    }, Qt::QueuedConnection);
+}
+
+Application::~Application() {
+    if (m_ownsPrivate) {
+        application_free(m_d);
+    }
+}
+const Channels* Application::channels() const
+{
+    return m_channels;
+}
+Channels* Application::channels()
+{
+    return m_channels;
+}
+Channels::Channels(bool /*owned*/, QObject *parent):
     QAbstractItemModel(parent),
     m_d(0),
     m_ownsPrivate(false)
@@ -240,73 +246,47 @@ Todos::Todos(bool /*owned*/, QObject *parent):
     initHeaderData();
 }
 
-Todos::Todos(QObject *parent):
+Channels::Channels(QObject *parent):
     QAbstractItemModel(parent),
-    m_d(todos_new(this,
-        todosActiveCountChanged,
-        todosCountChanged,
-        [](const Todos* o) {
+    m_d(channels_new(this,
+        [](const Channels* o) {
             emit o->newDataReady(QModelIndex());
         },
-        [](Todos* o, quintptr first, quintptr last) {
+        [](Channels* o, quintptr first, quintptr last) {
             o->dataChanged(o->createIndex(first, 0, first),
                        o->createIndex(last, 0, last));
         },
-        [](Todos* o) {
+        [](Channels* o) {
             o->beginResetModel();
         },
-        [](Todos* o) {
+        [](Channels* o) {
             o->endResetModel();
         },
-        [](Todos* o, int first, int last) {
+        [](Channels* o, int first, int last) {
             o->beginInsertRows(QModelIndex(), first, last);
         },
-        [](Todos* o) {
+        [](Channels* o) {
             o->endInsertRows();
         },
-        [](Todos* o, int first, int last) {
+        [](Channels* o, int first, int last) {
             o->beginRemoveRows(QModelIndex(), first, last);
         },
-        [](Todos* o) {
+        [](Channels* o) {
             o->endRemoveRows();
         }
 )),
     m_ownsPrivate(true)
 {
-    connect(this, &Todos::newDataReady, this, [this](const QModelIndex& i) {
+    connect(this, &Channels::newDataReady, this, [this](const QModelIndex& i) {
         this->fetchMore(i);
     }, Qt::QueuedConnection);
     initHeaderData();
 }
 
-Todos::~Todos() {
+Channels::~Channels() {
     if (m_ownsPrivate) {
-        todos_free(m_d);
+        channels_free(m_d);
     }
 }
-void Todos::initHeaderData() {
-}
-quint64 Todos::activeCount() const
-{
-    return todos_active_count_get(m_d);
-}
-quint64 Todos::count() const
-{
-    return todos_count_get(m_d);
-}
-void Todos::add(const QString& description)
-{
-    return todos_add(m_d, description.utf16(), description.size());
-}
-void Todos::clearCompleted()
-{
-    return todos_clear_completed(m_d);
-}
-bool Todos::remove(quint64 index)
-{
-    return todos_remove(m_d, index);
-}
-void Todos::setAll(bool completed)
-{
-    return todos_set_all(m_d, completed);
+void Channels::initHeaderData() {
 }

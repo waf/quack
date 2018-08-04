@@ -1,127 +1,90 @@
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(dead_code)]
+
 use interface::*;
 
-#[derive(Default, Clone)]
-struct TodosItem {
-    completed: bool,
-    description: String,
+use std::collections::HashMap;
+use std::env;
+use config;
+use failure::Error;
+use slack_integration::connection::SlackConnection;
+
+pub struct Application {
+    emit: ApplicationEmitter,
+    connection: SlackConnection,
+    channels: Channels,
 }
 
-pub struct Todos {
-    emit: TodosEmitter,
-    model: TodosList,
-    list: Vec<TodosItem>,
-    active_count: usize,
-}
+impl ApplicationTrait for Application {
+    fn new(emit: ApplicationEmitter, channels: Channels) -> Application {
+        println!("Application::new");
 
-impl Todos {
-    fn update_active_count(&mut self) {
-        let ac = self.list.iter().filter(|i| !i.completed).count();
-        if self.active_count != ac {
-            self.active_count = ac;
-            self.emit.active_count_changed();
-        }
-    }
-}
+        let settings = read_settings("Settings.toml")
+            .expect(&format!(
+                "Could not find Settings.toml configuration file at path {}",
+                env::current_dir().unwrap().display()
+            ));
 
-impl TodosTrait for Todos {
-    fn new(emit: TodosEmitter, model: TodosList) -> Todos {
-        Todos {
+        // set up a real-time connection to slack in a background thread.
+        // it will use a channel to communicate with the UI.
+        let token = settings["token"].to_owned();
+        let connection = SlackConnection::start_in_background(token);
+
+        Application {
             emit: emit,
-            model: model,
-            list: vec![TodosItem::default(); 0],
-            active_count: 0,
+            connection: connection,
+            channels: channels,
         }
     }
-    fn emit(&self) -> &TodosEmitter {
+    fn emit(&self) -> &ApplicationEmitter {
+        println!("Application::emit");
         &self.emit
     }
-    fn active_count(&self) -> u64 {
-        self.active_count as u64
+    fn channels(&self) -> &Channels {
+        &self.channels
     }
-    fn count(&self) -> u64 {
-        self.list.len() as u64
+    fn channels_mut(&mut self) -> &mut Channels {
+        &mut self.channels
+    }
+}
+
+#[derive(Default, Clone)]
+struct ChannelsItem {
+    name: String,
+}
+
+pub struct Channels {
+    emit: ChannelsEmitter,
+    model: ChannelsList,
+    list: Vec<ChannelsItem>,
+}
+
+impl ChannelsTrait for Channels {
+    fn new(emit: ChannelsEmitter, model: ChannelsList) -> Channels {
+        println!("Channels::new");
+        Channels {
+            emit: emit,
+            model: model,
+            list: vec![ChannelsItem::default(); 10]
+        }
+    }
+    fn emit(&self) -> &ChannelsEmitter {
+        println!("Channels::emit");
+        &self.emit
     }
     fn row_count(&self) -> usize {
         self.list.len()
     }
-    fn completed(&self, index: usize) -> bool {
-        if index >= self.list.len() {
-            return false;
-        }
-        self.list[index].completed
-    }
-    fn set_completed(&mut self, index: usize, v: bool) -> bool {
-        if index >= self.list.len() {
-            return false;
-        }
-        self.list[index].completed = v;
-        self.update_active_count();
-        true
-    }
-    fn description(&self, index: usize) -> &str {
-        if index < self.list.len() {
-            &self.list[index].description
-        } else {
-	    ""
-        }
-    }
-    fn set_description(&mut self, index: usize, v: String) -> bool {
-        if index >= self.list.len() {
-            return false;
-        }
-        self.list[index].description = v;
-        true
-    }
-    fn insert_rows(&mut self, row: usize, count: usize) -> bool {
-        if count == 0 || row > self.list.len() {
-            return false;
-        }
-        self.model.begin_insert_rows(row, row + count - 1);
-        for i in 0..count {
-            self.list.insert(row + i, TodosItem::default());
-        }
-        self.model.end_insert_rows();
-        self.active_count += count;
-        self.emit.active_count_changed();
-        self.emit.count_changed();
-        true
-    }
-    fn remove_rows(&mut self, row: usize, count: usize) -> bool {
-        if count == 0 || row + count > self.list.len() {
-            return false;
-        }
-        self.model.begin_remove_rows(row, row + count - 1);
-        self.list.drain(row..row + count);
-        self.model.end_remove_rows();
-        self.emit.count_changed();
-        self.update_active_count();
-        true
-    }
-    fn clear_completed(&mut self) -> () {
-        self.model.begin_reset_model();
-        self.list.retain(|i| !i.completed);
-        self.model.end_reset_model();
-        self.emit.count_changed();
-    }
-    fn add(&mut self, description: String) {
-        let end = self.list.len();
-        self.model.begin_insert_rows(end, end);
-        self.list.insert(end, TodosItem { completed: false, description });
-        self.model.end_insert_rows();
-        self.active_count += 1;
-        self.emit.active_count_changed();
-        self.emit.count_changed();
-        self.model.begin_reset_model();
-        self.model.end_reset_model();
-    }
-    fn remove(&mut self, index: u64) -> bool {
-        self.remove_rows(index as usize, 1)
-    }
-    fn set_all(&mut self, completed: bool) {
-        for i in &mut self.list {
-            i.completed = completed;
-        }
-        self.model.data_changed(0, self.list.len() - 1);
-        self.update_active_count();
+    fn name(&self, index: usize) -> &str {
+        &self.list[index].name
     }
 }
+
+fn read_settings(filename: &str) -> Result<HashMap<String, String>, Error> {
+    let mut settings_file = config::Config::default();
+    settings_file.merge(config::File::with_name(filename))?;
+    let settings = settings_file.try_into::<HashMap<String, String>>()?;
+    Ok(settings)
+}
+

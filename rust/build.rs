@@ -15,6 +15,7 @@ const TARGET_IMPL: &'static str = "src/implementation.rs";
 
 fn main() {
     println!("Running build.rs");
+    println!("cargo:rerun-if-changed=\"qt/bindings.json\"");
     if bindings_changed().unwrap() {
         println!("Regenerating bindings based on {}", &BINDINGS_INPUT);
         generate_bindings().unwrap();

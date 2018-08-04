@@ -80,33 +80,88 @@ fn to_c_int(n: usize) -> c_int {
 }
 
 
-pub struct TodosQObject {}
+pub struct ApplicationQObject {}
 
 #[derive(Clone)]
-pub struct TodosEmitter {
-    qobject: Arc<Mutex<*const TodosQObject>>,
-    active_count_changed: fn(*const TodosQObject),
-    count_changed: fn(*const TodosQObject),
-    new_data_ready: fn(*const TodosQObject),
+pub struct ApplicationEmitter {
+    qobject: Arc<Mutex<*const ApplicationQObject>>,
 }
 
-unsafe impl Send for TodosEmitter {}
+unsafe impl Send for ApplicationEmitter {}
 
-impl TodosEmitter {
+impl ApplicationEmitter {
     fn clear(&self) {
         *self.qobject.lock().unwrap() = null();
     }
-    pub fn active_count_changed(&self) {
-        let ptr = *self.qobject.lock().unwrap();
-        if !ptr.is_null() {
-            (self.active_count_changed)(ptr);
-        }
-    }
-    pub fn count_changed(&self) {
-        let ptr = *self.qobject.lock().unwrap();
-        if !ptr.is_null() {
-            (self.count_changed)(ptr);
-        }
+}
+
+pub trait ApplicationTrait {
+    fn new(emit: ApplicationEmitter,
+        channels: Channels) -> Self;
+    fn emit(&self) -> &ApplicationEmitter;
+    fn channels(&self) -> &Channels;
+    fn channels_mut(&mut self) -> &mut Channels;
+}
+
+#[no_mangle]
+pub extern "C" fn application_new(
+    application: *mut ApplicationQObject,
+    channels: *mut ChannelsQObject,
+    channels_new_data_ready: fn(*const ChannelsQObject),
+    channels_data_changed: fn(*const ChannelsQObject, usize, usize),
+    channels_begin_reset_model: fn(*const ChannelsQObject),
+    channels_end_reset_model: fn(*const ChannelsQObject),
+    channels_begin_insert_rows: fn(*const ChannelsQObject, usize, usize),
+    channels_end_insert_rows: fn(*const ChannelsQObject),
+    channels_begin_remove_rows: fn(*const ChannelsQObject, usize, usize),
+    channels_end_remove_rows: fn(*const ChannelsQObject),
+) -> *mut Application {
+    let channels_emit = ChannelsEmitter {
+        qobject: Arc::new(Mutex::new(channels)),
+        new_data_ready: channels_new_data_ready,
+    };
+    let model = ChannelsList {
+        qobject: channels,
+        data_changed: channels_data_changed,
+        begin_reset_model: channels_begin_reset_model,
+        end_reset_model: channels_end_reset_model,
+        begin_insert_rows: channels_begin_insert_rows,
+        end_insert_rows: channels_end_insert_rows,
+        begin_remove_rows: channels_begin_remove_rows,
+        end_remove_rows: channels_end_remove_rows,
+    };
+    let d_channels = Channels::new(channels_emit, model);
+    let application_emit = ApplicationEmitter {
+        qobject: Arc::new(Mutex::new(application)),
+    };
+    let d_application = Application::new(application_emit,
+        d_channels);
+    Box::into_raw(Box::new(d_application))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn application_free(ptr: *mut Application) {
+    Box::from_raw(ptr).emit().clear();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn application_channels_get(ptr: *mut Application) -> *mut Channels {
+    (&mut *ptr).channels_mut()
+}
+
+pub struct ChannelsQObject {}
+
+#[derive(Clone)]
+pub struct ChannelsEmitter {
+    qobject: Arc<Mutex<*const ChannelsQObject>>,
+    new_data_ready: fn(*const ChannelsQObject),
+}
+
+unsafe impl Send for ChannelsEmitter {}
+
+impl ChannelsEmitter {
+    fn clear(&self) {
+        *self.qobject.lock().unwrap() = null();
     }
     pub fn new_data_ready(&self) {
         let ptr = *self.qobject.lock().unwrap();
@@ -116,18 +171,18 @@ impl TodosEmitter {
     }
 }
 
-pub struct TodosList {
-    qobject: *const TodosQObject,
-    data_changed: fn(*const TodosQObject, usize, usize),
-    begin_reset_model: fn(*const TodosQObject),
-    end_reset_model: fn(*const TodosQObject),
-    begin_insert_rows: fn(*const TodosQObject, usize, usize),
-    end_insert_rows: fn(*const TodosQObject),
-    begin_remove_rows: fn(*const TodosQObject, usize, usize),
-    end_remove_rows: fn(*const TodosQObject),
+pub struct ChannelsList {
+    qobject: *const ChannelsQObject,
+    data_changed: fn(*const ChannelsQObject, usize, usize),
+    begin_reset_model: fn(*const ChannelsQObject),
+    end_reset_model: fn(*const ChannelsQObject),
+    begin_insert_rows: fn(*const ChannelsQObject, usize, usize),
+    end_insert_rows: fn(*const ChannelsQObject),
+    begin_remove_rows: fn(*const ChannelsQObject, usize, usize),
+    end_remove_rows: fn(*const ChannelsQObject),
 }
 
-impl TodosList {
+impl ChannelsList {
     pub fn data_changed(&self, first: usize, last: usize) {
         (self.data_changed)(self.qobject, first, last);
     }
@@ -151,15 +206,9 @@ impl TodosList {
     }
 }
 
-pub trait TodosTrait {
-    fn new(emit: TodosEmitter, model: TodosList) -> Self;
-    fn emit(&self) -> &TodosEmitter;
-    fn active_count(&self) -> u64;
-    fn count(&self) -> u64;
-    fn add(&mut self, description: String) -> ();
-    fn clear_completed(&mut self) -> ();
-    fn remove(&mut self, index: u64) -> bool;
-    fn set_all(&mut self, completed: bool) -> ();
+pub trait ChannelsTrait {
+    fn new(emit: ChannelsEmitter, model: ChannelsList) -> Self;
+    fn emit(&self) -> &ChannelsEmitter;
     fn row_count(&self) -> usize;
     fn insert_rows(&mut self, _row: usize, _count: usize) -> bool { false }
     fn remove_rows(&mut self, _row: usize, _count: usize) -> bool { false }
@@ -168,114 +217,67 @@ pub trait TodosTrait {
     }
     fn fetch_more(&mut self) {}
     fn sort(&mut self, u8, SortOrder) {}
-    fn completed(&self, index: usize) -> bool;
-    fn set_completed(&mut self, index: usize, bool) -> bool;
-    fn description(&self, index: usize) -> &str;
-    fn set_description(&mut self, index: usize, String) -> bool;
+    fn name(&self, index: usize) -> &str;
 }
 
 #[no_mangle]
-pub extern "C" fn todos_new(
-    todos: *mut TodosQObject,
-    todos_active_count_changed: fn(*const TodosQObject),
-    todos_count_changed: fn(*const TodosQObject),
-    todos_new_data_ready: fn(*const TodosQObject),
-    todos_data_changed: fn(*const TodosQObject, usize, usize),
-    todos_begin_reset_model: fn(*const TodosQObject),
-    todos_end_reset_model: fn(*const TodosQObject),
-    todos_begin_insert_rows: fn(*const TodosQObject, usize, usize),
-    todos_end_insert_rows: fn(*const TodosQObject),
-    todos_begin_remove_rows: fn(*const TodosQObject, usize, usize),
-    todos_end_remove_rows: fn(*const TodosQObject),
-) -> *mut Todos {
-    let todos_emit = TodosEmitter {
-        qobject: Arc::new(Mutex::new(todos)),
-        active_count_changed: todos_active_count_changed,
-        count_changed: todos_count_changed,
-        new_data_ready: todos_new_data_ready,
+pub extern "C" fn channels_new(
+    channels: *mut ChannelsQObject,
+    channels_new_data_ready: fn(*const ChannelsQObject),
+    channels_data_changed: fn(*const ChannelsQObject, usize, usize),
+    channels_begin_reset_model: fn(*const ChannelsQObject),
+    channels_end_reset_model: fn(*const ChannelsQObject),
+    channels_begin_insert_rows: fn(*const ChannelsQObject, usize, usize),
+    channels_end_insert_rows: fn(*const ChannelsQObject),
+    channels_begin_remove_rows: fn(*const ChannelsQObject, usize, usize),
+    channels_end_remove_rows: fn(*const ChannelsQObject),
+) -> *mut Channels {
+    let channels_emit = ChannelsEmitter {
+        qobject: Arc::new(Mutex::new(channels)),
+        new_data_ready: channels_new_data_ready,
     };
-    let model = TodosList {
-        qobject: todos,
-        data_changed: todos_data_changed,
-        begin_reset_model: todos_begin_reset_model,
-        end_reset_model: todos_end_reset_model,
-        begin_insert_rows: todos_begin_insert_rows,
-        end_insert_rows: todos_end_insert_rows,
-        begin_remove_rows: todos_begin_remove_rows,
-        end_remove_rows: todos_end_remove_rows,
+    let model = ChannelsList {
+        qobject: channels,
+        data_changed: channels_data_changed,
+        begin_reset_model: channels_begin_reset_model,
+        end_reset_model: channels_end_reset_model,
+        begin_insert_rows: channels_begin_insert_rows,
+        end_insert_rows: channels_end_insert_rows,
+        begin_remove_rows: channels_begin_remove_rows,
+        end_remove_rows: channels_end_remove_rows,
     };
-    let d_todos = Todos::new(todos_emit, model);
-    Box::into_raw(Box::new(d_todos))
+    let d_channels = Channels::new(channels_emit, model);
+    Box::into_raw(Box::new(d_channels))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn todos_free(ptr: *mut Todos) {
+pub unsafe extern "C" fn channels_free(ptr: *mut Channels) {
     Box::from_raw(ptr).emit().clear();
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn todos_active_count_get(ptr: *const Todos) -> u64 {
-    (&*ptr).active_count()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn todos_count_get(ptr: *const Todos) -> u64 {
-    (&*ptr).count()
-}
-
-#[no_mangle]
-pub extern "C" fn todos_add(ptr: *mut Todos, description_str: *const c_ushort, description_len: c_int) -> () {
-    let mut description = String::new();
-    set_string_from_utf16(&mut description, description_str, description_len);
-    let o = unsafe { &mut *ptr };
-    let r = o.add(description);
-    r
-}
-
-#[no_mangle]
-pub extern "C" fn todos_clear_completed(ptr: *mut Todos) -> () {
-    let o = unsafe { &mut *ptr };
-    let r = o.clear_completed();
-    r
-}
-
-#[no_mangle]
-pub extern "C" fn todos_remove(ptr: *mut Todos, index: u64) -> bool {
-    let o = unsafe { &mut *ptr };
-    let r = o.remove(index);
-    r
-}
-
-#[no_mangle]
-pub extern "C" fn todos_set_all(ptr: *mut Todos, completed: bool) -> () {
-    let o = unsafe { &mut *ptr };
-    let r = o.set_all(completed);
-    r
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn todos_row_count(ptr: *const Todos) -> c_int {
+pub unsafe extern "C" fn channels_row_count(ptr: *const Channels) -> c_int {
     to_c_int((&*ptr).row_count())
 }
 #[no_mangle]
-pub unsafe extern "C" fn todos_insert_rows(ptr: *mut Todos, row: c_int, count: c_int) -> bool {
+pub unsafe extern "C" fn channels_insert_rows(ptr: *mut Channels, row: c_int, count: c_int) -> bool {
     (&mut *ptr).insert_rows(to_usize(row), to_usize(count))
 }
 #[no_mangle]
-pub unsafe extern "C" fn todos_remove_rows(ptr: *mut Todos, row: c_int, count: c_int) -> bool {
+pub unsafe extern "C" fn channels_remove_rows(ptr: *mut Channels, row: c_int, count: c_int) -> bool {
     (&mut *ptr).remove_rows(to_usize(row), to_usize(count))
 }
 #[no_mangle]
-pub unsafe extern "C" fn todos_can_fetch_more(ptr: *const Todos) -> bool {
+pub unsafe extern "C" fn channels_can_fetch_more(ptr: *const Channels) -> bool {
     (&*ptr).can_fetch_more()
 }
 #[no_mangle]
-pub unsafe extern "C" fn todos_fetch_more(ptr: *mut Todos) {
+pub unsafe extern "C" fn channels_fetch_more(ptr: *mut Channels) {
     (&mut *ptr).fetch_more()
 }
 #[no_mangle]
-pub unsafe extern "C" fn todos_sort(
-    ptr: *mut Todos,
+pub unsafe extern "C" fn channels_sort(
+    ptr: *mut Channels,
     column: u8,
     order: SortOrder,
 ) {
@@ -283,38 +285,13 @@ pub unsafe extern "C" fn todos_sort(
 }
 
 #[no_mangle]
-pub extern "C" fn todos_data_completed(ptr: *const Todos, row: c_int) -> bool {
-    let o = unsafe { &*ptr };
-    o.completed(to_usize(row)).into()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn todos_set_data_completed(
-    ptr: *mut Todos, row: c_int,
-    v: bool,
-) -> bool {
-    (&mut *ptr).set_completed(to_usize(row), v)
-}
-
-#[no_mangle]
-pub extern "C" fn todos_data_description(
-    ptr: *const Todos, row: c_int,
+pub extern "C" fn channels_data_name(
+    ptr: *const Channels, row: c_int,
     d: *mut QString,
     set: fn(*mut QString, *const c_char, len: c_int),
 ) {
     let o = unsafe { &*ptr };
-    let data = o.description(to_usize(row));
+    let data = o.name(to_usize(row));
     let s: *const c_char = data.as_ptr() as (*const c_char);
     set(d, s, to_c_int(data.len()));
-}
-
-#[no_mangle]
-pub extern "C" fn todos_set_data_description(
-    ptr: *mut Todos, row: c_int,
-    s: *const c_ushort, len: c_int,
-) -> bool {
-    let o = unsafe { &mut *ptr };
-    let mut v = String::new();
-    set_string_from_utf16(&mut v, s, len);
-    o.set_description(to_usize(row), v)
 }
